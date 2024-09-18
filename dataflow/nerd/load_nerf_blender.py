@@ -43,6 +43,34 @@ def pose_spherical(theta, phi, radius):
     c2w = np.array([[-1, 0, 0, 0], [0, 0, 1, 0], [0, 1, 0, 0], [0, 0, 0, 1]]) @ c2w
     return c2w
 
+def get_image_from_exr(filename):
+    import OpenEXR
+    import Imath
+    import numpy as np
+
+    # Open the EXR file
+    exr_file = OpenEXR.InputFile(filename)
+
+    channels = exr_file.header()['channels'].keys()
+    # Print the available channels
+    # print("Available channels:", channels)
+
+    # Get image size
+    header = exr_file.header()
+    dw = header['dataWindow']
+    width = dw.max.x - dw.min.x + 1
+    height = dw.max.y - dw.min.y + 1
+
+    # Read the image channels (R, G, B)
+    FLOAT = Imath.PixelType(Imath.PixelType.FLOAT)
+    red = np.frombuffer(exr_file.channel('Image.R', FLOAT), dtype=np.float32).reshape(height, width)
+    green = np.frombuffer(exr_file.channel('Image.G', FLOAT), dtype=np.float32).reshape(height, width)
+    blue = np.frombuffer(exr_file.channel('Image.B', FLOAT), dtype=np.float32).reshape(height, width)
+    mask = np.frombuffer(exr_file.channel('Image.A', FLOAT), dtype=np.float32).reshape(height, width)
+    # Combine channels into an RGB image
+    rgb_image = np.stack([red, green, blue, mask], axis=-1)
+    return rgb_image
+
 
 def load_blender_data(basedir, half_res=False, trainskip=1, testskip=1, valskip=1):
     splits = ["train", "val", "test"]
@@ -70,8 +98,9 @@ def load_blender_data(basedir, half_res=False, trainskip=1, testskip=1, valskip=
             skip = max(testskip, 1)
 
         for frame in meta["frames"][::skip]:
-            fname = os.path.join(basedir, frame["file_path"] + ".png")
-            img_file = (imageio.imread(fname) / 255).astype(np.float32)
+            fname = os.path.join(basedir, frame["file_path"])
+            # img_file = (imageio.imread(fname) / 255).astype(np.float32)
+            img_file = get_image_from_exr(fname)
             imgs.append(img_file[..., 0:3])
             masks.append(img_file[..., 3:])
 
