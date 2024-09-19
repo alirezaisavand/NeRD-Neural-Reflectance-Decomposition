@@ -680,12 +680,30 @@ class NerdFineModel(tf.keras.Model):
         if "brdf_embedding" in payload:
             brdf_embedding_loss = self.brdf_encoder.get_kernel_regularization()
 
+        if image_loss is Nan:
+
         final_loss = (
             image_loss * tf.maximum(inverse_color, 0.01)
             + alpha_loss * inverse_advanced
             + direct_img_loss * lambda_color_loss
             + brdf_embedding_loss
         )
+
+        nan_check = tf.math.is_nan(image_loss)
+        if tf.reduce_any(nan_check):
+            print('image loss is nan')
+
+        nan_check = tf.math.is_nan(alpha_loss)
+        if tf.reduce_any(nan_check):
+            print('alpha loss is nan')
+
+        nan_check = tf.math.is_nan(direct_img_loss)
+        if tf.reduce_any(nan_check):
+            print('direct image loss is nan')
+
+        nan_check = tf.math.is_nan(brdf_embedding_loss)
+        if tf.reduce_any(nan_check):
+            print('BRDF embedding loss is nan')
 
         losses = {
             "loss": final_loss,
