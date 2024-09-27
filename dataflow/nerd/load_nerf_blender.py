@@ -5,6 +5,7 @@ import imageio
 import numpy as np
 import tensorflow as tf
 
+import imageio
 
 def trans_t(t):
     return tf.convert_to_tensor(
@@ -71,13 +72,28 @@ def get_image_from_exr(filename):
     rgb_image = np.stack([red, green, blue, mask], axis=-1)
     return rgb_image
 
+def imread(f):
+    if f.endswith("png"):
+        return imageio.imread(f, apply_gamma=False)
+    else:
+        return imageio.imread(f)
 
 def load_blender_data(basedir, half_res=False, trainskip=1, testskip=1, valskip=1):
+    masksdir = os.path.join(basedir, 'masks')
+    imagedir = os.path.join(basedir, 'images')
     splits = ["train", "val", "test"]
     metas = {}
     for s in splits:
-        with open(os.path.join(basedir, "transforms_{}.json".format(s)), "r") as fp:
+        if s == 'val':
+            tmp = 'train'
+        else:
+            tmp = s
+        with open(os.path.join(basedir, "transforms_{}.json".format(tmp)), "r") as fp:
             metas[s] = json.load(fp)
+
+    metas['val']['frames'] = [metas['train']['frames'][10 * i] for i in range(0, len(metas['train']['frames'])//10)]
+
+    print('val size:', len(metas['val']['frames']))
 
     all_imgs = []
     all_masks = []
@@ -98,11 +114,18 @@ def load_blender_data(basedir, half_res=False, trainskip=1, testskip=1, valskip=
             skip = max(testskip, 1)
 
         for frame in meta["frames"][::skip]:
-            fname = os.path.join(basedir, frame["file_path"])
+            # fname = os.path.join(basedir, frame["file_path"])
             # img_file = (imageio.imread(fname) / 255).astype(np.float32)
-            img_file = get_image_from_exr(fname)
-            imgs.append(img_file[..., 0:3])
-            masks.append(img_file[..., 3:])
+            # img_file = get_image_from_exr(fname)
+            image_name = 'Image' + frame["file_path"].split('\\')[1]
+            image_path = os.path.join(imagedir, image_name)
+            print('image path:', image_path)
+            imgs.append(imread(image_path)[..., 0:3] / 255.0)
+
+            mask_name = 'Segmentation' + frame["file_path"].split('\\')[1]
+            mask_path = os.path.join(masksdir, mask_name)
+            print('mask path:', mask_path)
+            masks.append(np.expand_dims(imread(mask_path) / 255.0, axis=-1))
 
             # Read the poses
             poses.append(np.array(frame["transform_matrix"]))
@@ -118,6 +141,8 @@ def load_blender_data(basedir, half_res=False, trainskip=1, testskip=1, valskip=
         poses = np.array(poses).astype(np.float32)
 
         counts.append(counts[-1] + imgs.shape[0])
+
+        print('imgs shape:', np.array(imgs).shape, 'masks shape:', np.array(masks).shape, 'poses shape', np.array(poses).shape)
 
         all_imgs.append(imgs)
         all_masks.append(masks)
